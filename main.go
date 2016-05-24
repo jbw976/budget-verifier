@@ -19,6 +19,15 @@ type Transaction struct {
 	Amount      int // amount in cents, can be negative or positive
 }
 
+func (t Transaction) String() string {
+	return fmt.Sprintf(
+		"[%s: '%s', '%s', %s]",
+		t.Timestamp.Format("2006-01-02"),
+		t.Description,
+		t.Details,
+		strconv.FormatFloat(float64(t.Amount)/100.0, 'f', 2, 64))
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		printArgsFatal()
