@@ -17,9 +17,23 @@ type Transaction struct {
 	Description string
 	Details     string
 	Amount      int // amount in cents, can be negative or positive
+	Matching    *Transaction
 }
 
 func (t Transaction) String() string {
+	var matchingStr string
+	if t.Matching != nil {
+		matchingStr = t.Matching.StringNoFollow()
+	} else {
+		matchingStr = "<nil>"
+	}
+
+	return fmt.Sprintf("[%s (matching: %s)]", t.StringNoFollow(), matchingStr)
+}
+
+var verbose bool
+
+func (t Transaction) StringNoFollow() string {
 	return fmt.Sprintf(
 		"[%s: '%s', '%s', %s]",
 		t.Timestamp.Format("2006-01-02"),
@@ -171,19 +185,35 @@ func parseTransaction(record []string, timestampIndex, descriptionIndex, amountI
 func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]Transaction, error) {
 	missingTransactions := []Transaction{}
 
-	for _, bankT := range bankTransactions {
-		matched := false
-		for _, budgetT := range budgetTransactions {
+	for bankIndex := 0; bankIndex < len(bankTransactions); bankIndex++ {
+		bankT := &(bankTransactions[bankIndex])
+
+		for budgetIndex := 0; budgetIndex < len(budgetTransactions); budgetIndex++ {
+			budgetT := &(budgetTransactions[budgetIndex])
 			if bankT.Amount == budgetT.Amount {
+				if budgetT.Matching != nil {
+					// this budget entry has already been matched, it can't be matched again
+					continue
+				}
+
 				// matched the bank entry with an entry in the budget app, stop searching for a match
-				matched = true
+				bankT.Matching = budgetT
+				budgetT.Matching = bankT
 				break
 			}
 		}
 
-		if !matched {
-			missingTransactions = append(missingTransactions, bankT)
+		if bankT.Matching == nil {
+			missingTransactions = append(missingTransactions, *bankT)
 		}
+	}
+
+	if verbose {
+		log.Printf("****************** start bank transactions: ******************")
+		for _, bt := range bankTransactions {
+			log.Printf("%s", bt)
+		}
+		log.Printf("****************** end bank transactions *********************")
 	}
 
 	return missingTransactions, nil
