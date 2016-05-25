@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ func (t Transaction) String() string {
 }
 
 var verbose bool
+var dateMatchRangeDays int
 
 func (t Transaction) StringNoFollow() string {
 	return fmt.Sprintf(
@@ -50,6 +52,8 @@ func main() {
 	bankPath := os.Args[1]
 	budgetPath := os.Args[2]
 	log.Printf("comparing bank statement %s to budget entries %s", bankPath, budgetPath)
+
+	dateMatchRangeDays = 5
 
 	bankRecords, err := readFile(bankPath)
 	if err != nil {
@@ -188,6 +192,7 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]
 	for bankIndex := 0; bankIndex < len(bankTransactions); bankIndex++ {
 		bankT := &(bankTransactions[bankIndex])
 
+		potentialMatches := []*Transaction{}
 		for budgetIndex := 0; budgetIndex < len(budgetTransactions); budgetIndex++ {
 			budgetT := &(budgetTransactions[budgetIndex])
 			if bankT.Amount == budgetT.Amount {
@@ -196,10 +201,31 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]
 					continue
 				}
 
-				// matched the bank entry with an entry in the budget app, stop searching for a match
-				bankT.Matching = budgetT
-				budgetT.Matching = bankT
-				break
+				// the amount matches and this budget entry hasn't already been matched yet.  add to the list
+				// of potential matches so we can later on pick the closest match by date
+				potentialMatches = append(potentialMatches, budgetT)
+			}
+		}
+
+		var closest *Transaction
+		closestDuration := 99999.0
+		if len(potentialMatches) > 0 {
+			for i := 0; i < len(potentialMatches); i++ {
+				pm := potentialMatches[i]
+				d := bankT.Timestamp.Sub(pm.Timestamp)
+				absHours := math.Abs(d.Hours())
+				if absHours < closestDuration {
+					closestDuration = absHours
+					closest = pm
+				}
+			}
+
+			// verify the date of the closest matching budget transaction is close enough in time
+			// (don't match transactions with the same amount but from very different dates)
+			if closest.Timestamp.Before(bankT.Timestamp.AddDate(0, 0, dateMatchRangeDays)) &&
+				closest.Timestamp.After(bankT.Timestamp.AddDate(0, 0, -1*dateMatchRangeDays)) {
+				bankT.Matching = closest
+				closest.Matching = bankT
 			}
 		}
 
