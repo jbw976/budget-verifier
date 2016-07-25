@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -32,7 +31,7 @@ func (t Transaction) String() string {
 	return fmt.Sprintf("[%s (matching: %s)]", t.StringNoFollow(), matchingStr)
 }
 
-var verbose bool
+var verbose = false
 var dateMatchRangeDays int
 
 func (t Transaction) StringNoFollow() string {
@@ -210,23 +209,36 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]
 		var closest *Transaction
 		closestDuration := 99999.0
 		if len(potentialMatches) > 0 {
+			if verbose && len(potentialMatches) > 1 {
+				log.Printf("bank item %s has %d potential matches: %+v", bankT.StringNoFollow(), len(potentialMatches), potentialMatches)
+			}
+
 			for i := 0; i < len(potentialMatches); i++ {
 				pm := potentialMatches[i]
-				d := bankT.Timestamp.Sub(pm.Timestamp)
-				absHours := math.Abs(d.Hours())
-				if absHours < closestDuration {
-					closestDuration = absHours
+				d := bankT.Timestamp.Sub(pm.Timestamp).Hours()
+
+				// for the best match, the delta between bank statement item and budget app item should always
+				// be 0 or positive.  The budget app entry is always from the date the transaction happened, while
+				// the bank item takes a while to clear.  Bank should always be later than budget app.
+				if d >= 0 && d < closestDuration {
+					closestDuration = d
 					closest = pm
 				}
 			}
 
 			// verify the date of the closest matching budget transaction is close enough in time
 			// (don't match transactions with the same amount but from very different dates)
-			if closest.Timestamp.Before(bankT.Timestamp.AddDate(0, 0, dateMatchRangeDays)) &&
+			if closest != nil &&
+				closest.Timestamp.Before(bankT.Timestamp.AddDate(0, 0, dateMatchRangeDays)) &&
 				closest.Timestamp.After(bankT.Timestamp.AddDate(0, 0, -1*dateMatchRangeDays)) {
+
 				bankT.Matching = closest
 				closest.Matching = bankT
 			}
+		}
+
+		if verbose && len(potentialMatches) > 1 {
+			log.Printf("bank item %s matched with %s", bankT.StringNoFollow(), bankT.Matching)
 		}
 
 		if bankT.Matching == nil {
