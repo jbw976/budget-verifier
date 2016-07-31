@@ -2,14 +2,27 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+func printArgsFatal() {
+	log.Fatal(`budget-verifier <bankPath> <budgetPath>
+	    filter-file: ./filter.json`)
+}
+
+const (
+	FilterFileName = `filter.json`
 )
 
 type Transaction struct {
@@ -32,7 +45,7 @@ func (t Transaction) String() string {
 }
 
 var verbose = false
-var dateMatchRangeDays int
+var dateMatchRangeDays = 7
 
 func (t Transaction) StringNoFollow() string {
 	return fmt.Sprintf(
@@ -40,7 +53,17 @@ func (t Transaction) StringNoFollow() string {
 		t.Timestamp.Format("2006-01-02"),
 		t.Description,
 		t.Details,
-		strconv.FormatFloat(float64(t.Amount)/100.0, 'f', 2, 64))
+		printAmount(t.Amount))
+}
+
+type Filter struct {
+	FilterRegex string `json:"regex"`
+	MinAmount   int    `json:"min"` // amount in cents, can be negative or positive
+	MaxAmount   int    `json:"max"` // amount in cents, can be negative or positive
+}
+
+func (f Filter) String() string {
+	return fmt.Sprintf("[filter:'%s', min:%s, max:%s]", f.FilterRegex, printAmount(f.MinAmount), printAmount(f.MaxAmount))
 }
 
 func main() {
@@ -51,8 +74,6 @@ func main() {
 	bankPath := os.Args[1]
 	budgetPath := os.Args[2]
 	log.Printf("comparing bank statement %s to budget entries %s", bankPath, budgetPath)
-
-	dateMatchRangeDays = 5
 
 	bankRecords, err := readFile(bankPath)
 	if err != nil {
@@ -72,7 +93,17 @@ func main() {
 		log.Fatalf("failed to parse transactions for %s: %+v", budgetPath, err)
 	}
 
-	missingTransactions, err := compareTransactions(bankTransactions, budgetTransactions)
+	workingDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatalf("failed to get working directory: %+v", err)
+	}
+	filterPath := filepath.Join(workingDir, FilterFileName)
+	filters, err := loadFilters(filterPath)
+	if err != nil {
+		log.Fatalf("failed to load filters from %s: %+v", filterPath, err)
+	}
+
+	missingTransactions, err := compareTransactions(bankTransactions, budgetTransactions, filters)
 	if err != nil {
 		log.Fatalf("failed to compare transactions for %s and %s: %+v", bankPath, budgetPath, err)
 	}
@@ -185,11 +216,18 @@ func parseTransaction(record []string, timestampIndex, descriptionIndex, amountI
 	return transaction, nil
 }
 
-func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]Transaction, error) {
+func compareTransactions(bankTransactions, budgetTransactions []Transaction, filters []Filter) ([]Transaction, error) {
 	missingTransactions := []Transaction{}
 
 	for bankIndex := 0; bankIndex < len(bankTransactions); bankIndex++ {
 		bankT := &(bankTransactions[bankIndex])
+
+		if isFiltered(bankT, filters) {
+			if verbose {
+				log.Printf("filtered %s", bankT.StringNoFollow())
+			}
+			continue
+		}
 
 		potentialMatches := []*Transaction{}
 		for budgetIndex := 0; budgetIndex < len(budgetTransactions); budgetIndex++ {
@@ -257,6 +295,33 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction) ([]
 	return missingTransactions, nil
 }
 
-func printArgsFatal() {
-	log.Fatal("budget-verifier <bankPath> <budgetPath>")
+func loadFilters(filterPath string) ([]Filter, error) {
+	buf, err := ioutil.ReadFile(filterPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read filter file: %+v", err)
+	}
+
+	var filters []Filter
+	err = json.Unmarshal(buf, &filters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal filter file: %+v", err)
+	}
+
+	log.Printf("filters: %+v", filters)
+	return filters, nil
+}
+
+func isFiltered(t *Transaction, filters []Filter) bool {
+	for i := range filters {
+		match, _ := regexp.MatchString(filters[i].FilterRegex, t.Description)
+		if match && t.Amount >= filters[i].MinAmount && t.Amount <= filters[i].MaxAmount {
+			return true
+		}
+	}
+
+	return false
+}
+
+func printAmount(amount int) string {
+	return strconv.FormatFloat(float64(amount)/100.0, 'f', 2, 64)
 }
