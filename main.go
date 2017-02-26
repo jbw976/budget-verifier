@@ -307,7 +307,12 @@ func loadFilters(filterPath string) ([]Filter, error) {
 		return nil, fmt.Errorf("failed to unmarshal filter file: %+v", err)
 	}
 
-	log.Printf("filters: %+v", filters)
+	if verbose {
+		log.Printf("filters: %+v", filters)
+	} else {
+		log.Printf("found %d filters", len(filters))
+	}
+
 	return filters, nil
 }
 
