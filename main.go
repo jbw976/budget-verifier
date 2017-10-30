@@ -2,28 +2,19 @@ package main
 
 import (
 	"encoding/csv"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
 func printArgsFatal() {
-	log.Fatal(`budget-verifier <bankPath> <budgetPath>
-	    filter-file: ./filter.json`)
+	log.Fatalf(`budget-verifier <bankPath> <budgetPath>
+	    filter-file: ./%s`, FilterFileName)
 }
-
-const (
-	FilterFileName = `filter.json`
-)
 
 type Transaction struct {
 	Timestamp   time.Time
@@ -54,12 +45,6 @@ func (t Transaction) StringNoFollow() string {
 		t.Description,
 		t.Details,
 		printAmount(t.Amount))
-}
-
-type Filter struct {
-	FilterRegex string `json:"regex"`
-	MinAmount   int    `json:"min"` // amount in cents, can be negative or positive
-	MaxAmount   int    `json:"max"` // amount in cents, can be negative or positive
 }
 
 func (f Filter) String() string {
@@ -143,79 +128,6 @@ func readFile(p string) ([][]string, error) {
 	}
 }
 
-func parseBankTransactions(bankRecords [][]string) ([]Transaction, error) {
-	// find starting index of useful records
-	start := -1
-	for i, record := range bankRecords {
-		if len(record) > 3 && record[0] == "Date" && record[1] == "Description" && record[2] == "Amount" {
-			// found the headers that precedes the useful records.  there's still 1 more useless record,
-			// so the good starting point is actually 1 greater than just the next index.
-			start = i + 2
-		}
-	}
-
-	if start < 0 {
-		return nil, errors.New("failed to find start of useful records")
-	}
-
-	transactions := []Transaction{}
-
-	for i := start; i < len(bankRecords); i++ {
-		transaction, err := parseTransaction(bankRecords[i], 0, 1, 2, -1)
-		if err != nil {
-			log.Printf("invalid record, skipping: %+v", err)
-			continue
-		}
-
-		transactions = append(transactions, transaction)
-	}
-
-	return transactions, nil
-}
-
-func parseBudgetTransactions(budgetRecords [][]string) ([]Transaction, error) {
-	transactions := []Transaction{}
-
-	for i := 1; i < len(budgetRecords); i++ {
-		transaction, err := parseTransaction(budgetRecords[i], 0, 2, 4, 3)
-		if err != nil {
-			log.Printf("invalid record, skipping: %+v", err)
-			continue
-		}
-
-		transactions = append(transactions, transaction)
-	}
-
-	return transactions, nil
-}
-
-func parseTransaction(record []string, timestampIndex, descriptionIndex, amountIndex, detailsIndex int) (Transaction, error) {
-	refTime := "01/02/2006"
-	t, err := time.Parse(refTime, record[timestampIndex])
-	if err != nil {
-		return Transaction{}, fmt.Errorf("invalid timestamp: %+v, %+v", err, record)
-	}
-
-	a, err := strconv.ParseFloat(strings.Replace(record[amountIndex], ",", "", -1), 64)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("invalid amount: %+v, %+v", err, record)
-	}
-
-	var d string
-	if detailsIndex > 0 {
-		d = record[detailsIndex]
-	}
-
-	transaction := Transaction{
-		Timestamp:   t,
-		Description: record[descriptionIndex],
-		Details:     d,
-		Amount:      (int)(a * 100),
-	}
-
-	return transaction, nil
-}
-
 func compareTransactions(bankTransactions, budgetTransactions []Transaction, filters []Filter) ([]Transaction, error) {
 	missingTransactions := []Transaction{}
 
@@ -293,38 +205,6 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction, fil
 	}
 
 	return missingTransactions, nil
-}
-
-func loadFilters(filterPath string) ([]Filter, error) {
-	buf, err := ioutil.ReadFile(filterPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read filter file: %+v", err)
-	}
-
-	var filters []Filter
-	err = json.Unmarshal(buf, &filters)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal filter file: %+v", err)
-	}
-
-	if verbose {
-		log.Printf("filters: %+v", filters)
-	} else {
-		log.Printf("found %d filters", len(filters))
-	}
-
-	return filters, nil
-}
-
-func isFiltered(t *Transaction, filters []Filter) bool {
-	for i := range filters {
-		match, _ := regexp.MatchString(filters[i].FilterRegex, t.Description)
-		if match && t.Amount >= filters[i].MinAmount && t.Amount <= filters[i].MaxAmount {
-			return true
-		}
-	}
-
-	return false
 }
 
 func printAmount(amount int) string {
