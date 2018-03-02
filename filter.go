@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 )
 
@@ -21,6 +22,11 @@ type Filter struct {
 func loadFilters(filterPath string) ([]Filter, error) {
 	buf, err := ioutil.ReadFile(filterPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// the filter file doesn't exist, return an empty list of filters
+			return []Filter{}, nil
+		}
+
 		return nil, fmt.Errorf("failed to read filter file: %+v", err)
 	}
 
