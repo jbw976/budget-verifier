@@ -1,0 +1,12 @@
+[
+    {
+        "regex": "AmazonPrime Membership",
+        "min": -1400,
+        "max": -1400
+    },
+    {
+        "regex": "My Employer Paycheck",
+        "min": 100000,
+        "max": 150000
+    }
+]
