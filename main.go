@@ -8,89 +8,78 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
+
+	"github.com/spf13/cobra"
 )
 
-func printArgsFatal() {
-	log.Fatalf(`budget-verifier <bankPath> <budgetPath>
-	    filter-file: ./%s`, FilterFileName)
+var rootCmd = &cobra.Command{
+	Use:  "budget-verifier",
+	RunE: runVerify,
 }
 
-type Transaction struct {
-	Timestamp   time.Time
-	Description string
-	Details     string
-	Amount      int // amount in cents, can be negative or positive
-	Matching    *Transaction
-}
+var (
+	bankPath           = ""
+	budgetPath         = ""
+	filterPath         = "filter.json"
+	verbose            = false
+	dateMatchRangeDays = 7
+)
 
-func (t Transaction) String() string {
-	var matchingStr string
-	if t.Matching != nil {
-		matchingStr = t.Matching.StringNoFollow()
-	} else {
-		matchingStr = "<nil>"
-	}
-
-	return fmt.Sprintf("[%s (matching: %s)]", t.StringNoFollow(), matchingStr)
-}
-
-var verbose = false
-var dateMatchRangeDays = 7
-
-func (t Transaction) StringNoFollow() string {
-	return fmt.Sprintf(
-		"[%s: '%s', '%s', %s]",
-		t.Timestamp.Format("2006-01-02"),
-		t.Description,
-		t.Details,
-		printAmount(t.Amount))
-}
-
-func (f Filter) String() string {
-	return fmt.Sprintf("[filter:'%s', min:%s, max:%s]", f.FilterRegex, printAmount(f.MinAmount), printAmount(f.MaxAmount))
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enables or disables verbose output")
+	rootCmd.PersistentFlags().StringVar(&bankPath, "bank", "", "path to downloaded bank statement")
+	rootCmd.PersistentFlags().StringVar(&budgetPath, "budget", "", "path to downloaded budget app statement")
+	rootCmd.PersistentFlags().StringVar(&filterPath, "filter", "filter.json", "path to filter JSON file")
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		printArgsFatal()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Printf("budget-verify error: %+v\n", err)
+	}
+}
+
+func runVerify(cmd *cobra.Command, args []string) error {
+	if bankPath == "" || budgetPath == "" {
+		return fmt.Errorf("both bank path and budget path must be specified")
 	}
 
-	bankPath := os.Args[1]
-	budgetPath := os.Args[2]
 	log.Printf("comparing bank statement %s to budget entries %s", bankPath, budgetPath)
 
+	// read the bank statement file and parse the transactions
 	bankRecords, err := readFile(bankPath)
 	if err != nil {
-		log.Fatalf("failed to read %s: %+v", bankPath, err)
+		return fmt.Errorf("failed to read %s: %+v", bankPath, err)
 	}
 	bankTransactions, err := parseBankTransactions(bankRecords)
 	if err != nil {
-		log.Fatalf("failed to parse transactions for %s: %+v", bankPath, err)
+		return fmt.Errorf("failed to parse transactions for %s: %+v", bankPath, err)
 	}
 
+	// read the budget app file and parse the transactions
 	budgetRecords, err := readFile(budgetPath)
 	if err != nil {
-		log.Fatalf("failed to read %s: %+v", budgetPath, err)
+		return fmt.Errorf("failed to read %s: %+v", budgetPath, err)
 	}
 	budgetTransactions, err := parseBudgetTransactions(budgetRecords)
 	if err != nil {
-		log.Fatalf("failed to parse transactions for %s: %+v", budgetPath, err)
+		return fmt.Errorf("failed to parse transactions for %s: %+v", budgetPath, err)
 	}
 
+	// load filters from the filter file in the working directory
 	workingDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
-		log.Fatalf("failed to get working directory: %+v", err)
+		return fmt.Errorf("failed to get working directory: %+v", err)
 	}
-	filterPath := filepath.Join(workingDir, FilterFileName)
+	filterPath := filepath.Join(workingDir, filterPath)
 	filters, err := loadFilters(filterPath)
 	if err != nil {
-		log.Fatalf("failed to load filters from %s: %+v", filterPath, err)
+		return fmt.Errorf("failed to load filters from %s: %+v", filterPath, err)
 	}
 
+	// compare bank vs. budget transactions to find missing ones
 	missingTransactions, err := compareTransactions(bankTransactions, budgetTransactions, filters)
 	if err != nil {
-		log.Fatalf("failed to compare transactions for %s and %s: %+v", bankPath, budgetPath, err)
+		return fmt.Errorf("failed to compare transactions for %s and %s: %+v", bankPath, budgetPath, err)
 	}
 
 	if len(missingTransactions) == 0 {
@@ -101,6 +90,8 @@ func main() {
 			log.Printf("%+v", t)
 		}
 	}
+
+	return nil
 }
 
 func readFile(p string) ([][]string, error) {
