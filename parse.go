@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -90,7 +91,7 @@ func parseTransaction(record []string, pi parseIndices) (Transaction, error) {
 		Timestamp:   t,
 		Description: record[pi.description],
 		Details:     d,
-		Amount:      (int)(a * 100),
+		Amount:      (int)(math.Round(a * 100.0)),
 	}
 
 	return transaction, nil
