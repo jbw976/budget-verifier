@@ -9,8 +9,21 @@ First download the most recent statements from your bank and budget app.
 To run `budget-verifier` to compare the two, simply invoke it along with the path to your downloaded bank statement and your downloaded budget app statement:
 
 ```console
-budget-verifier <bankPath> <budgetPath>
-	    filter-file: ./filter.json
+Usage:
+  budget-verifier [flags]
+
+Flags:
+      --bank string     path to downloaded bank statement
+      --budget string   path to downloaded budget app statement
+      --filter string   path to filter JSON file (default "filter.json")
+  -h, --help            help for budget-verifier
+      --verbose         Enables or disables verbose output
+```
+
+For example:
+
+```console
+budget-verifier --bank=credit-card.csv --budget=budget.csv
 ```
 
 Any entries from your bank statement that are not found in your budget app will be printed to the console.

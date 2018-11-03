@@ -8,5 +8,11 @@
         "regex": "My Employer Paycheck",
         "min": 100000,
         "max": 150000
+    },
+    {
+        "regex": "Some one-time purchase",
+        "min": -8599,
+        "max": -8599,
+        "date": "2018-10-15"
     }
 ]
