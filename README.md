@@ -43,11 +43,12 @@ For filter examples, see [filter.json.example](filter.json.example).
 
 The following formats are currently supported:
 
-**Bank Statements**
+### Bank Statements
 
 * [Bank of America checking/savings account](https://www.bankofamerica.com/)
 * [Bank of America credit card](https://www.bankofamerica.com/)
+* [Chase credit card](https://www.chase.com/)
 
-**Budget App**
+### Budget App
 
 * [Goodbudget](https://goodbudget.com/)
