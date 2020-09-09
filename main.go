@@ -147,13 +147,13 @@ func compareTransactions(bankTransactions, budgetTransactions []Transaction, fil
 			}
 		}
 
+		if verbose {
+			log.Printf("bank item %s has %d potential match(es): %+v", bankT.StringNoFollow(), len(potentialMatches), potentialMatches)
+		}
+
 		var closest *Transaction
 		closestDuration := 99999.0
 		if len(potentialMatches) > 0 {
-			if verbose && len(potentialMatches) > 1 {
-				log.Printf("bank item %s has %d potential matches: %+v", bankT.StringNoFollow(), len(potentialMatches), potentialMatches)
-			}
-
 			for i := 0; i < len(potentialMatches); i++ {
 				pm := potentialMatches[i]
 				d := bankT.Timestamp.Sub(pm.Timestamp).Hours()
