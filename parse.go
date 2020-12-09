@@ -48,7 +48,7 @@ func parseBankTransactions(bankRecords [][]string) ([]Transaction, error) {
 	for i := start; i < len(bankRecords); i++ {
 		transaction, err := parseTransaction(bankRecords[i], pi)
 		if err != nil {
-			log.Printf("invalid record, skipping: %+v", err)
+			log.Printf("invalid bank record, skipping: %+v", err)
 			continue
 		}
 
@@ -59,14 +59,14 @@ func parseBankTransactions(bankRecords [][]string) ([]Transaction, error) {
 }
 
 func parseBudgetTransactions(budgetRecords [][]string) ([]Transaction, error) {
-	pi := parseIndices{timestamp: 0, description: 2, amount: 4, details: 3}
+	pi := parseIndices{timestamp: 0, description: 2, amount: 5, details: 3}
 
 	transactions := []Transaction{}
 
 	for i := 1; i < len(budgetRecords); i++ {
 		transaction, err := parseTransaction(budgetRecords[i], pi)
 		if err != nil {
-			log.Printf("invalid record, skipping: %+v", err)
+			log.Printf("invalid budget record, skipping: %+v", err)
 			continue
 		}
 
